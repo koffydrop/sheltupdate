@@ -1,6 +1,8 @@
 {
 	"port": 8080,
 	"host": "https://inject.shelter.uwu.network",
+	"stats": true,
+	"setupIntervalHours": 3,
 	"proxy": {
 		"cache": {
 			"lastUsedRemoveHours": 1,

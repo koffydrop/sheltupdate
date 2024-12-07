@@ -6,7 +6,7 @@ export const srcDir = dirname(dirname(fileURLToPath(import.meta.url)));
 
 export const startTime = Date.now();
 
-export const version = "5";
+export const version = "11";
 
 let rawCfg;
 try {
@@ -18,6 +18,8 @@ try {
 export const config = Object.freeze({
 	port: rawCfg?.port || 8080,
 	host: rawCfg?.host || `http://localhost:${rawCfg?.port || 8080}`,
+	stats: rawCfg?.stats ?? true,
+	setupIntervalHours: rawCfg?.setupIntervalHours ?? 3,
 	proxy: {
 		cache: {
 			lastUsedRemoveHours: rawCfg?.proxy?.cache?.lastUsedRemoveHours ?? 1,

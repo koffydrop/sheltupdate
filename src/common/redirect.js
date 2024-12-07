@@ -1,13 +1,14 @@
 import { getProxyURL } from "./proxy/index.js";
 import { proxyVsRedirect } from "./state.js";
 import { config } from "./config.js";
+import { log, withLogSection } from "./logger.js";
 
-export default async (context, base = config.apiBases.v1) => {
-	proxyVsRedirect.push("redirect");
+export default withLogSection("redirect", async (context, base = config.apiBases.v1) => {
+	if (config.stats) proxyVsRedirect.push("redirect");
 
 	const rUrl = context.req.url.replace(/.*:\/\/[^/]*/, "");
 	const proxyUrl = `${base}${getProxyURL(rUrl)}`;
 
-	console.log(proxyUrl);
+	log(proxyUrl);
 	return context.redirect(proxyUrl);
-};
+});

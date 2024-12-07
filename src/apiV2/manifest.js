@@ -1,33 +1,37 @@
 import basicProxy from "../common/proxy/index.js";
 import { patch, createModule } from "./patchModule.js";
 import { config } from "../common/config.js";
-import { branches } from "../common/branchesLoader.js";
+import { ensureBranchIsReady, getBranch } from "../common/branchesLoader.js";
 import { requestCounts, uniqueUsers } from "../common/state.js";
 import originatingIp from "../common/originatingIp.js";
+import { log, withLogSection } from "../common/logger.js";
 
 const base = config.apiBases.v2;
 const host = config.host;
 
 // https://discord.com/api/updates/distributions/app/manifests/latest?channel=canary&platform=win&arch=x86
 
-export const handleManifest = async (c) => {
+export const handleManifest = withLogSection("v2 manifest", async (c) => {
 	const branch = c.req.param("branch");
-	if (!branches[branch]) {
+	if (!getBranch(branch)) {
 		return c.notFound("Invalid sheltupdate branch");
 	}
 
-	requestCounts.v2_manifest++;
+	log(JSON.stringify(c.req.param()), JSON.stringify(c.req.query()));
+
+	if (config.stats) requestCounts.v2_manifest++;
 
 	const ip = originatingIp(c);
 
-	uniqueUsers[ip] = {
-		platform: c.req.query("platform"),
-		host_version: "unknown",
-		channel: c.req.query("channel"),
-		branch: branch,
-		apiVersion: "v2",
-		time: Date.now(),
-	};
+	if (config.stats)
+		uniqueUsers[ip] = {
+			platform: c.req.query("platform"),
+			host_version: "unknown",
+			channel: c.req.query("channel"),
+			branch,
+			apiVersion: "v2",
+			time: Date.now(),
+		};
 
 	let json = await basicProxy(c, {}, undefined, base).then((r) => r.json());
 
@@ -38,23 +42,27 @@ export const handleManifest = async (c) => {
 	const currentHostVersion = json.modules["discord_desktop_core"].full.host_version;
 
 	for (let m of branchModules) {
+		const branchName = m.substring(6);
+
+		// make sure its ready!
+		await ensureBranchIsReady(branchName);
+
+		const branchObj = getBranch(branchName);
 		json.modules[m] = {
 			full: {
 				host_version: currentHostVersion,
-				module_version: branches[m.substring(6)].version,
-				package_sha256: await createModule(m.substring(6), branches[m.substring(6)]),
+				module_version: branchObj.version,
+				package_sha256: await createModule(branchName, branchObj),
 				url: `${host}/custom_module/${m}/full.distro`,
 			},
 			deltas: [],
 		};
 	}
 
-	console.log(json);
-
 	json.modules.discord_desktop_core.deltas = []; // Remove deltas
 
 	const oldVersion = json.modules.discord_desktop_core.full.module_version;
-	const newVersion = parseInt(`${branches[branch].version}${oldVersion.toString()}`);
+	const newVersion = parseInt(`${getBranch(branch).version}${oldVersion.toString()}`);
 
 	// Modify version to prefix branch's version
 	json.modules.discord_desktop_core.full.module_version = newVersion;
@@ -64,10 +72,8 @@ export const handleManifest = async (c) => {
 	// Modify URL to use this host
 	json.modules.discord_desktop_core.full.url = `${host}/${branch}/${json.modules.discord_desktop_core.full.url.split("/").slice(3).join("/").replace(`${oldVersion}/full.distro`, `${newVersion}/full.distro`)}`;
 
-	console.log(json.modules.discord_desktop_core);
-
 	return c.json(json);
-};
+});
 
 /*
   - Similar to branches except this is way more general use
